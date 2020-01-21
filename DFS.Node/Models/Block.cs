@@ -1,13 +1,18 @@
-﻿using System;
-
-namespace DFS.Node.Models
+﻿namespace DFS.Node.Models
 {
+    /// <summary>
+    /// Блок данных
+    /// </summary>
     public class Block
     {
-        public Guid Id { get; set; }
+        /// <summary>
+        /// Информация о блоке
+        /// </summary>
+        public BlockInfo Info { get; set; }
 
-        public int Index { get; set; }
-
+        /// <summary>
+        /// Данные
+        /// </summary>
         public byte[] Data { get; set; }
     }
 }
