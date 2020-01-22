@@ -1,4 +1,6 @@
-﻿namespace DFS.Node.Models
+﻿using System.Collections.Generic;
+
+namespace DFS.Node.Models
 {
     /// <summary>
     /// Блок данных
@@ -13,6 +15,6 @@
         /// <summary>
         /// Данные
         /// </summary>
-        public byte[] Data { get; set; }
+        public List<byte> Data { get; set; }
     }
 }

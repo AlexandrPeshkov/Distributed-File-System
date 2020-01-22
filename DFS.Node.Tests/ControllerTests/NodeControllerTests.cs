@@ -1,5 +1,8 @@
+﻿using DFS.Node.Controllers;
 using DFS.Node.Models;
+using DFS.Node.Requests;
 using DFS.Node.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -9,17 +12,18 @@ using System.IO;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace DFS.Node.Tests
+namespace DFS.Node.Tests.ControllerTests
 {
-    public class NodeServiceTests : IDisposable
+    public class NodeControllerTests
     {
         private readonly NodeConfiguration _nodeConfiguration;
         private readonly NodeService _nodeService;
-
         private readonly IConfigurationRoot _configuration;
         private readonly IServiceProvider _serviceProvider;
 
-        public NodeServiceTests()
+        private readonly NodeController _nodeController;
+
+        public NodeControllerTests()
         {
             var configBuilder = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
@@ -37,18 +41,11 @@ namespace DFS.Node.Tests
             _nodeConfiguration = optionAccessor.Value;
 
             _nodeService = new NodeService(optionAccessor);
+            _nodeController = new NodeController(_nodeService);
         }
 
         [Fact]
-        public void All_Directories_Exist_On_Init()
-        {
-            Assert.True(Directory.Exists(_nodeConfiguration.RootPath));
-            string nodeDataPath = $"{_nodeConfiguration.RootPath}\\{_nodeConfiguration.NodeName}";
-            Assert.True(Directory.Exists(nodeDataPath));
-        }
-
-        [Fact]
-        public async Task Write_Test_File_By_2_Blocks()
+        public async Task Write_File()
         {
             string fileName = "testFile";
             PartilFile partilFile = new PartilFile
@@ -78,8 +75,20 @@ namespace DFS.Node.Tests
                 }
             };
 
-            bool state = await _nodeService.AddOrRewriteFile(partilFile);
-            Assert.True(state);
+            SavePartialFileRequest request = new SavePartialFileRequest
+            {
+                PartilFile = partilFile,
+                ForceOwerrite = true
+            };
+
+            IActionResult actionResult = await _nodeController.SaveFile(request);
+
+            OkObjectResult ok = actionResult as OkObjectResult;
+            Assert.NotNull(ok);
+            State state = ok.Value as State;
+            Assert.NotNull(state);
+            Assert.True(state.IsSuccess);
+
             Assert.True(_nodeService.FileExist(fileName));
             Assert.True(_nodeService.BlockExist(fileName, 0));
             Assert.True(_nodeService.BlockExist(fileName, 1));
@@ -89,19 +98,20 @@ namespace DFS.Node.Tests
         public void Delete_File()
         {
             string fileName = "testFile";
-            bool state = _nodeService.DeleteFile(fileName);
 
-            Assert.True(state);
+            IActionResult actionResult = _nodeController.RemovFile(fileName);
+            OkObjectResult ok = actionResult as OkObjectResult;
+            Assert.NotNull(ok);
+            State state = ok.Value as State;
+            Assert.NotNull(state);
+            Assert.True(state.IsSuccess);
+
             Assert.False(_nodeService.FileExist(fileName));
             Assert.False(_nodeService.BlockExist(fileName, 0));
             Assert.False(_nodeService.BlockExist(fileName, 1));
 
             string filePath = $"{_nodeConfiguration.RootPath}\\{_nodeConfiguration.NodeName}\\{fileName}";
             Assert.False(Directory.Exists(filePath));
-        }
-
-        public void Dispose()
-        {
         }
     }
 }

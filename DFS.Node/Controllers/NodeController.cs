@@ -1,4 +1,5 @@
 ﻿using DFS.Node.Models;
+using DFS.Node.Requests;
 using DFS.Node.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
@@ -22,25 +23,25 @@ namespace DFS.Node.Controllers
         /// <summary>
         /// Сохранить или перезаписть блоки файла
         /// </summary>
-        /// <param name="partilFile">Частичный файл</param>
+        /// <param name="request">Частичный файл</param>
         /// <returns></returns>
         [HttpPost]
         [Route(nameof(SaveFile))]
-        public async Task<IActionResult> SaveFile(PartilFile partilFile)
+        public async Task<IActionResult> SaveFile(SavePartialFileRequest request)
         {
             if (ModelState.IsValid)
             {
-                bool state = await _nodeService.AddOrRewriteFile(partilFile);
+                State state = await _nodeService.TryAddFile(request.PartilFile, request.ForceOwerrite);
                 if (state)
                 {
-                    return Ok(partilFile.FileName);
+                    return Ok(state);
                 }
                 else
                 {
-                    return StatusCode(500);
+                    return StatusCode(500, state);
                 }
             }
-            return BadRequest();
+            return BadRequest(request.PartilFile.FileName);
         }
 
         /// <summary>
@@ -48,21 +49,23 @@ namespace DFS.Node.Controllers
         /// </summary>
         /// <param name="fileName"></param>
         /// <returns></returns>
-        public IActionResult DeleteFile(string fileName)
+        [HttpDelete]
+        [Route(nameof(RemovFile))]
+        public IActionResult RemovFile(string fileName)
         {
             if (ModelState.IsValid)
             {
-                bool state = _nodeService.DeleteFile(fileName);
+                State state = _nodeService.RemoveFile(fileName);
                 if (state)
                 {
-                    return Ok(fileName);
+                    return Ok(state);
                 }
                 else
                 {
-                    return StatusCode(500);
+                    return StatusCode(500, state);
                 }
             }
-            return BadRequest();
+            return BadRequest(fileName);
         }
     }
 }

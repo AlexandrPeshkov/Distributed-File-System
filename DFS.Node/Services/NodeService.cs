@@ -30,30 +30,105 @@ namespace DFS.Node.Services
         /// <summary>
         /// Добавить или перезаписать файл
         /// </summary>
-        /// <param name="file"></param>
-        public async Task<bool> AddOrRewriteFile(PartilFile file)
+        /// <param name="file">Файл</param>
+        /// <param name="forceOwerrite">Перезаписать существующий</param>
+        public async Task<State> TryAddFile(PartilFile file, bool forceOwerrite = false)
         {
+            State state = new State();
             try
             {
-                bool state = false;
                 if (file != null)
                 {
                     if (Files.ContainsKey(file.FileName))
                     {
-                        state = DeleteFile(file.FileName);
+                        if (forceOwerrite)
+                        {
+                            State isDeleted = RemoveFile(file.FileName);
+                            state += isDeleted;
+                            if (!isDeleted)
+                            {
+                                return state;
+                            }
+                        }
+                        else
+                        {
+                            state.IsSuccess = false;
+                            state.Messages.Add($"File with name {file.FileName} already exist");
+                            return state;
+                        }
                     }
-                    else
+                    State isWritten = await WriteFile(file);
+                    state += isWritten;
+                    if (isWritten)
                     {
-                        state = true;
+                        Files.Add(file.FileName, file.Blocks.Select(b => b.Info).ToList());
                     }
-                    bool isCreated = await AddFile(file);
-                    state = isCreated && state;
+                }
+                else
+                {
+                    state.IsSuccess = false;
+                    state.Messages.Add("File is null");
                 }
                 return state;
             }
             catch (Exception ex)
             {
-                return false;
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
+            }
+        }
+
+        /// <summary>
+        /// Добавить или перезаписать блок
+        /// </summary>
+        /// <param name="block"></param>
+        /// <param name="forceOwerrite">Перезаписать существующий</param>
+        public async Task<State> TryAddBlock(Block block, bool forceOwerrite = false)
+        {
+            State state = new State();
+            try
+            {
+                if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
+                {
+                    if (Files.TryGetValue(block.Info.FileName, out var blocks))
+                    {
+                        if (blocks.Exists(b => b.Index == block.Info.Index))
+                        {
+                            if (forceOwerrite)
+                            {
+                                State isRemoved = RemoveBlock(block.Info);
+                            }
+                            else
+                            {
+                                state.IsSuccess = false;
+                                state.Messages.Add($"Block with index {block.Info.Index} already exist for file {block.Info.FileName}");
+                                return state;
+                            }
+                        }
+                        state = await WriteBlock(block);
+                    }
+                    else
+                    {
+                        state = await TryAddFile(new PartilFile
+                        {
+                            FileName = block.Info.FileName,
+                            Blocks = new List<Block> { block }
+                        });
+                    }
+                }
+                else
+                {
+                    state.IsSuccess = false;
+                    state.Messages.Add("Block is incorrect");
+                }
+                return state;
+            }
+            catch (Exception ex)
+            {
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
             }
         }
 
@@ -62,13 +137,20 @@ namespace DFS.Node.Services
         /// </summary>
         /// <param name="fileName"></param>
         /// <returns></returns>
-        public bool DeleteFile(string fileName)
+        public State RemoveFile(string fileName)
         {
+            State state = new State();
             try
             {
-                if (Files.ContainsKey(fileName))
+                if (FileExist(fileName))
                 {
                     Files.Remove(fileName);
+                }
+                else
+                {
+                    state.IsSuccess = false;
+                    state.Messages.Add($"File {fileName} not registered");
+                    //return state;
                 }
 
                 string fileDirectoryPath = $"{DataPath}/{fileName}";
@@ -76,48 +158,62 @@ namespace DFS.Node.Services
                 {
                     Directory.Delete(fileDirectoryPath, true);
                 }
-                return true;
+                return state;
             }
             catch (Exception ex)
             {
-                return false;
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
             }
         }
 
         /// <summary>
-        /// Добавить или перезаписать блок
+        /// Удалить блок
         /// </summary>
-        /// <param name="block"></param>
-        public async Task<bool> AddOrRewriteBlock(Block block)
+        /// <param name="blockInfo">Мета блока</param>
+        /// <returns></returns>
+        public State RemoveBlock(BlockInfo blockInfo)
         {
+            State state = new State();
             try
             {
-                bool state = false;
-
-                if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
+                if (BlockExist(blockInfo))
                 {
-                    if (Files.TryGetValue(block.Info.FileName, out var blocks))
+                    string blockFileName = BlockFileName(blockInfo);
+                    string blockPath = $"{DataPath}/{blockInfo.FileName}/{blockFileName}";
+
+                    if (File.Exists(blockPath))
                     {
-                        if (blocks.Exists(b => b.Index == block.Info.Index))
+                        File.Delete(blockPath);
+                    }
+
+                    if (Files.TryGetValue(blockInfo.FileName, out var blocks))
+                    {
+                        BlockInfo existBlock = blocks.FirstOrDefault(b => b.Index == b.Index);
+                        if (blockInfo != null)
                         {
-                            state = RemoveBlock(block);
+                            blocks.Remove(blockInfo);
                         }
-                        state = await AddBlock(block);
-                    }
-                    else
-                    {
-                        state = await AddOrRewriteFile(new PartilFile
+                        else
                         {
-                            FileName = block.Info.FileName,
-                            Blocks = new List<Block> { block }
-                        });
+                            state.IsSuccess = false;
+                            state.Messages.Add($"Block {blockInfo.Index} not registered for file {blockInfo.FileName}");
+                        }
                     }
+                }
+                else
+                {
+                    state.IsSuccess = false;
+                    state.Messages.Add($"Block {blockInfo.Index} not registered for file {blockInfo.FileName}");
                 }
                 return state;
             }
             catch (Exception ex)
             {
-                return false;
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
             }
         }
 
@@ -195,73 +291,78 @@ namespace DFS.Node.Services
             return files;
         }
 
-        private async Task<bool> AddFile(PartilFile file)
+        /// <summary>
+        /// Записать файл на диск
+        /// </summary>
+        /// <param name="file"></param>
+        /// <returns></returns>
+        private async Task<State> WriteFile(PartilFile file)
         {
+            State state = new State();
             try
             {
-                Files.Add(file.FileName, file.Blocks.Select(b => b.Info).ToList());
                 string fileDirectoryPath = $"{DataPath}/{file.FileName}";
+                if (Directory.Exists(fileDirectoryPath))
+                {
+                    Directory.Delete(fileDirectoryPath, true);
+                }
                 Directory.CreateDirectory(fileDirectoryPath);
 
                 foreach (var block in file.Blocks)
                 {
-                    await AddBlock(block);
+                    State isWritten = await WriteBlock(block);
+                    state.IsSuccess = state && isWritten;
+                    if (!isWritten)
+                    {
+                        isWritten.Messages.AddRange(isWritten.Messages);
+                        break;
+                    }
                 }
-                return true;
+                return state;
             }
             catch (Exception ex)
             {
-                return false;
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
             }
         }
 
-        private bool RemoveBlock(Block block)
+        /// <summary>
+        /// Записать блок на диск
+        /// </summary>
+        /// <param name="block"></param>
+        /// <returns></returns>
+        private async Task<State> WriteBlock(Block block)
         {
+            State state = new State();
             try
             {
-                if (BlockExist(block.Info))
+                if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
                 {
-                    string blockFileName = BlockFileName(block);
+                    string blockFileName = BlockFileName(block.Info);
                     string blockPath = $"{DataPath}/{block.Info.FileName}/{blockFileName}";
-
                     if (File.Exists(blockPath))
                     {
                         File.Delete(blockPath);
+                        state.Messages.Add($"Block #{block.Info.Index} has been owerwritten");
                     }
-
-                    if (Files.TryGetValue(block.Info.FileName, out var blocks))
+                    using (FileStream fs = File.Create(blockPath, block.Data.Length, FileOptions.Asynchronous))
                     {
-                        BlockInfo blockInfo = blocks.FirstOrDefault(b => b.Index == b.Index);
-                        if (blockInfo != null)
-                        {
-                            blocks.Remove(blockInfo);
-                        }
+                        await fs.WriteAsync(block.Data, 0, block.Data.Length);
                     }
                 }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                return false;
-            }
-        }
-
-        private async Task<bool> AddBlock(Block block)
-        {
-            try
-            {
-                string blockFileName = BlockFileName(block);
-                string blockPath = $"{DataPath}/{block.Info.FileName}/{blockFileName}";
-
-                using (FileStream fs = File.Create(blockPath, block.Data.Length))
+                else
                 {
-                    await fs.WriteAsync(block.Data, 0, block.Data.Length);
+                    throw new ArgumentException("Incorrect block object, please check file name");
                 }
-                return true;
+                return state;
             }
             catch (Exception ex)
             {
-                return false;
+                state.IsSuccess = false;
+                state.Messages.Add(ex.Message);
+                return state;
             }
         }
 
@@ -280,9 +381,9 @@ namespace DFS.Node.Services
             return false;
         }
 
-        private string BlockFileName(Block block)
+        private string BlockFileName(BlockInfo blockInfo)
         {
-            return $"{_blockNamePrefix}{block.Info.Index}";
+            return $"{_blockNamePrefix}{blockInfo.Index}";
         }
 
         #endregion Utils
