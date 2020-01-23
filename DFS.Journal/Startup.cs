@@ -1,3 +1,4 @@
+using DFS.Balancer.Gateway;
 using DFS.Balancer.Models;
 using DFS.Balancer.Services;
 using Microsoft.AspNetCore.Builder;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using System;
 
 namespace DFS.Journal
 {
@@ -25,15 +27,17 @@ namespace DFS.Journal
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "DFS API", Version = "v1" });
+                c.IncludeXmlComments($@"{AppDomain.CurrentDomain.BaseDirectory}\DFS.Balancer.XML");
             });
 
             var nodeConfiguration = Configuration.GetSection(nameof(BalancerConfiguration));
 
             services.Configure<BalancerConfiguration>(nodeConfiguration);
             services.AddSingleton<BalancerService>();
+            services.AddSingleton<NodeGateway>();
         }
 
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, BalancerService balancerService)
         {
             if (env.IsDevelopment())
             {

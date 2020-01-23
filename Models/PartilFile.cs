@@ -5,12 +5,17 @@ namespace DFS.Node.Models
     /// <summary>
     /// Часть файла
     /// </summary>
-    public class PartilFile
+    public class PartialFile
     {
         /// <summary>
         /// Имя файла
         /// </summary>
         public string FileName { get; set; }
+
+        /// <summary>
+        /// Общее число блоков в файле
+        /// </summary>
+        public int TotalBlockCount { get; set; }
 
         /// <summary>
         /// Блоки данных

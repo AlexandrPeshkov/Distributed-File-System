@@ -16,5 +16,15 @@ namespace DFS.Balancer.Models
         /// Индексы
         /// </summary>
         public List<int> Indexes { get; set; }
+
+        /// <summary>
+        /// Число блоков в файле
+        /// </summary>
+        public int TotalBlockCount { get; set; }
+
+        public FileMeta()
+        {
+            Indexes = new List<int>();
+        }
     }
 }

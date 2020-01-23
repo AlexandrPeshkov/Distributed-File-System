@@ -9,7 +9,7 @@ namespace DFS.Node.Requests
         /// Часть файла
         /// </summary>
         [Required]
-        public PartilFile PartilFile { get; set; }
+        public PartialFile PartilFile { get; set; }
 
         /// <summary>
         /// Расзрешить перезапись

@@ -14,5 +14,10 @@
         /// Имя файла
         /// </summary>
         public string FileName { get; set; }
+
+        /// <summary>
+        /// Общее число блоков в файле
+        /// </summary>
+        public int TotalBlockCount { get; set; }
     }
 }

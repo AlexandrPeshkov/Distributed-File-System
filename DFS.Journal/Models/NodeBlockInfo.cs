@@ -16,5 +16,10 @@ namespace DFS.Balancer.Models
         /// Индексы блоков файла
         /// </summary>
         public List<int> Indexes { get; set; }
+
+        /// <summary>
+        /// Приоритет (пинг\скорость загрузки пр; 0 - высший)
+        /// </summary>
+        public int Priority { get; set; }
     }
 }

@@ -48,7 +48,8 @@ namespace DFS.Node.Tests.ControllerTests
         public async Task Write_File()
         {
             string fileName = "testFile";
-            PartilFile partilFile = new PartilFile
+            int totalBlockCount = 2;
+            PartialFile partilFile = new PartialFile
             {
                 FileName = fileName,
                 Blocks = new List<Block>
@@ -59,7 +60,8 @@ namespace DFS.Node.Tests.ControllerTests
                         Info = new BlockInfo
                         {
                             FileName = fileName,
-                            Index = 0
+                            Index = 0,
+                            TotalBlockCount = totalBlockCount
                         }
                     },
 
@@ -69,7 +71,8 @@ namespace DFS.Node.Tests.ControllerTests
                         Info = new BlockInfo
                         {
                             FileName = fileName,
-                            Index = 1
+                            Index = 1,
+                            TotalBlockCount = totalBlockCount
                         }
                     }
                 }
@@ -90,8 +93,8 @@ namespace DFS.Node.Tests.ControllerTests
             Assert.True(state.IsSuccess);
 
             Assert.True(_nodeService.FileExist(fileName));
-            Assert.True(_nodeService.BlockExist(fileName, 0));
-            Assert.True(_nodeService.BlockExist(fileName, 1));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 0, out var info));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 1, out var info2));
         }
 
         [Fact]
@@ -99,7 +102,7 @@ namespace DFS.Node.Tests.ControllerTests
         {
             string fileName = "testFile";
 
-            IActionResult actionResult = _nodeController.RemovFile(fileName);
+            IActionResult actionResult = _nodeController.DeleteFile(fileName);
             OkObjectResult ok = actionResult as OkObjectResult;
             Assert.NotNull(ok);
             State state = ok.Value as State;
@@ -107,8 +110,8 @@ namespace DFS.Node.Tests.ControllerTests
             Assert.True(state.IsSuccess);
 
             Assert.False(_nodeService.FileExist(fileName));
-            Assert.False(_nodeService.BlockExist(fileName, 0));
-            Assert.False(_nodeService.BlockExist(fileName, 1));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 0, out var info));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 1, out var info2));
 
             string filePath = $"{_nodeConfiguration.RootPath}\\{_nodeConfiguration.NodeName}\\{fileName}";
             Assert.False(Directory.Exists(filePath));

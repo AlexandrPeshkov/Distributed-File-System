@@ -10,11 +10,11 @@ namespace DFS.Balancer.Models
         /// <summary>
         /// Адерс хоста
         /// </summary>
-        public string HostName { get; set; }
+        public string NodeUrl { get; set; }
 
         /// <summary>
         /// Описания файлов
         /// </summary>
-        public List<FileMeta> Files { get; set; }
+        public List<FileMeta> PartialFiles { get; set; }
     }
 }

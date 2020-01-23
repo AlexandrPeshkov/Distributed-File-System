@@ -51,7 +51,8 @@ namespace DFS.Node.Tests.ServiceTests
         public async Task Write_Test_File_By_2_Blocks()
         {
             string fileName = "testFile";
-            PartilFile partilFile = new PartilFile
+            int totalBlockCount = 2;
+            PartialFile partilFile = new PartialFile
             {
                 FileName = fileName,
                 Blocks = new List<Block>
@@ -62,7 +63,8 @@ namespace DFS.Node.Tests.ServiceTests
                         Info = new BlockInfo
                         {
                             FileName = fileName,
-                            Index = 0
+                            Index = 0,
+                            TotalBlockCount = totalBlockCount
                         }
                     },
 
@@ -72,7 +74,8 @@ namespace DFS.Node.Tests.ServiceTests
                         Info = new BlockInfo
                         {
                             FileName = fileName,
-                            Index = 1
+                            Index = 1,
+                            TotalBlockCount = totalBlockCount
                         }
                     }
                 }
@@ -81,20 +84,20 @@ namespace DFS.Node.Tests.ServiceTests
             bool state = await _nodeService.TryAddFile(partilFile);
             Assert.True(state);
             Assert.True(_nodeService.FileExist(fileName));
-            Assert.True(_nodeService.BlockExist(fileName, 0));
-            Assert.True(_nodeService.BlockExist(fileName, 1));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 0, out var info));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 1, out var info2));
         }
 
         [Fact]
         public void Delete_File()
         {
             string fileName = "testFile";
-            bool state = _nodeService.RemoveFile(fileName);
+            bool state = _nodeService.DeleteFile(fileName);
 
             Assert.True(state);
             Assert.False(_nodeService.FileExist(fileName));
-            Assert.False(_nodeService.BlockExist(fileName, 0));
-            Assert.False(_nodeService.BlockExist(fileName, 1));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 0, out var info));
+            Assert.True(_nodeService.TryGetBlockInfo(fileName, 1, out var info2));
 
             string filePath = $"{_nodeConfiguration.RootPath}\\{_nodeConfiguration.NodeName}\\{fileName}";
             Assert.False(Directory.Exists(filePath));

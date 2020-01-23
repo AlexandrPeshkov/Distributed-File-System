@@ -1,9 +1,14 @@
-﻿using DFS.Node.Models;
+﻿using DFS.Balancer.Models;
+using DFS.Balancer.Services;
+using DFS.Node.Models;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace DFS.Node.Services
@@ -12,7 +17,11 @@ namespace DFS.Node.Services
     {
         private readonly NodeConfiguration _configuration;
 
+        private readonly KestrelServerOptions _serverOptions;
+
         private readonly string _blockNamePrefix = "Block_";
+
+        private readonly string _apiPrefix = "DFS";
 
         private string DataPath => $"{_configuration.RootPath}\\{_configuration.NodeName}";
 
@@ -23,6 +32,7 @@ namespace DFS.Node.Services
             _configuration = configuration.Value;
             Files = new Dictionary<string, List<BlockInfo>>();
             InitNode();
+            ConnectNode().Wait();
         }
 
         #region API Methods
@@ -32,10 +42,10 @@ namespace DFS.Node.Services
         /// </summary>
         /// <param name="file">Файл</param>
         /// <param name="forceOwerrite">Перезаписать существующий</param>
-        public async Task<State> TryAddFile(PartilFile file, bool forceOwerrite = false)
+        public async Task<State> TryAddFile(PartialFile file, bool forceOwerrite = false)
         {
             State state = new State();
-            try
+            //try
             {
                 if (file != null)
                 {
@@ -43,7 +53,7 @@ namespace DFS.Node.Services
                     {
                         if (forceOwerrite)
                         {
-                            State isDeleted = RemoveFile(file.FileName);
+                            State isDeleted = DeleteFile(file.FileName);
                             state += isDeleted;
                             if (!isDeleted)
                             {
@@ -71,12 +81,12 @@ namespace DFS.Node.Services
                 }
                 return state;
             }
-            catch (Exception ex)
-            {
-                state.IsSuccess = false;
-                state.Messages.Add(ex.Message);
-                return state;
-            }
+            //catch (Exception ex)
+            //{
+            //    state.IsSuccess = false;
+            //    state.Messages.Add(ex.Message);
+            //    return state;
+            //}
         }
 
         /// <summary>
@@ -97,7 +107,7 @@ namespace DFS.Node.Services
                         {
                             if (forceOwerrite)
                             {
-                                State isRemoved = RemoveBlock(block.Info);
+                                State isRemoved = Deletelock(block.Info.FileName, block.Info.Index);
                             }
                             else
                             {
@@ -110,10 +120,11 @@ namespace DFS.Node.Services
                     }
                     else
                     {
-                        state = await TryAddFile(new PartilFile
+                        state = await TryAddFile(new PartialFile
                         {
                             FileName = block.Info.FileName,
-                            Blocks = new List<Block> { block }
+                            Blocks = new List<Block> { block },
+                            TotalBlockCount = block.Info.TotalBlockCount
                         });
                     }
                 }
@@ -137,7 +148,7 @@ namespace DFS.Node.Services
         /// </summary>
         /// <param name="fileName"></param>
         /// <returns></returns>
-        public State RemoveFile(string fileName)
+        public State DeleteFile(string fileName)
         {
             State state = new State();
             try
@@ -171,14 +182,15 @@ namespace DFS.Node.Services
         /// <summary>
         /// Удалить блок
         /// </summary>
-        /// <param name="blockInfo">Мета блока</param>
+        /// <param name="fileName">Имя файла</param>
+        /// <param name="index">Индекс</param>
         /// <returns></returns>
-        public State RemoveBlock(BlockInfo blockInfo)
+        public State Deletelock(string fileName, int index)
         {
             State state = new State();
             try
             {
-                if (BlockExist(blockInfo))
+                if (TryGetBlockInfo(fileName, index, out var blockInfo))
                 {
                     string blockFileName = BlockFileName(blockInfo);
                     string blockPath = $"{DataPath}/{blockInfo.FileName}/{blockFileName}";
@@ -218,6 +230,39 @@ namespace DFS.Node.Services
         }
 
         /// <summary>
+        /// Считать блок
+        /// </summary>
+        /// <param name="fileName">Имя файла</param>
+        /// <param name="blockIndex">Индекс блока</param>
+        /// <returns></returns>
+        public async Task<Block> GetBlock(string fileName, int blockIndex)
+        {
+            Block block = null;
+
+            if (TryGetBlockInfo(fileName, blockIndex, out var blockInfo))
+            {
+                string blockFileName = BlockFileName(blockInfo);
+                string blockPath = $"{DataPath}/{blockInfo.FileName}/{blockFileName}";
+
+                if (File.Exists(blockPath))
+                {
+                    byte[] buffer = new byte[_configuration.BlockSize];
+                    using (var reader = File.OpenRead(blockPath))
+                    {
+                        await reader.ReadAsync(buffer, 0, _configuration.BlockSize);
+                    }
+
+                    block = new Block
+                    {
+                        Info = blockInfo,
+                        Data = buffer
+                    };
+                }
+            }
+            return block;
+        }
+
+        /// <summary>
         /// Проверка наличия блоков принадлежащих файлу
         /// </summary>
         /// <param name="fileName">Имя файла</param>
@@ -227,19 +272,14 @@ namespace DFS.Node.Services
             return Files.ContainsKey(fileName);
         }
 
-        public bool BlockExist(string fileName, int blockIndex)
+        public bool TryGetBlockInfo(string fileName, int blockIndex, out BlockInfo blockInfo)
         {
-            bool state = false;
+            blockInfo = null;
             if (Files.TryGetValue(fileName, out var blocks))
             {
-                state = blocks.Exists(b => b.Index == blockIndex);
+                blockInfo = blocks.FirstOrDefault(b => b.Index == blockIndex);
             }
-            return state;
-        }
-
-        public bool BlockExist(BlockInfo blockInfo)
-        {
-            return BlockExist(blockInfo.FileName, blockInfo.Index);
+            return blockInfo != null;
         }
 
         #endregion API Methods
@@ -260,6 +300,44 @@ namespace DFS.Node.Services
             }
 
             Files = ParseDataDirectory();
+        }
+
+        private async Task ConnectNode()
+        {
+            HttpClient httpClient = new HttpClient();
+
+            string url = $"http://{_configuration.BalancerHostName}:{_configuration.BalanderHostPort}/{_apiPrefix}/RegNode";
+
+            Dictionary<string, FileMeta> fileMeta = new Dictionary<string, FileMeta>();
+
+            foreach (var fileInfo in Files)
+            {
+                FileMeta meta = new FileMeta
+                {
+                    FileName = fileInfo.Key,
+                    TotalBlockCount = fileInfo.Value.FirstOrDefault().TotalBlockCount
+                };
+                if (!fileMeta.TryGetValue(fileInfo.Key, out meta))
+                {
+                    fileMeta.Add(fileInfo.Key, meta);
+                }
+
+                foreach (var info in fileInfo.Value)
+                {
+                    meta.Indexes.Add(info.Index);
+                }
+            }
+
+            NodeInfo nodeInfo = new NodeInfo
+            {
+                NodeUrl = "http://localhost:5002",
+                PartialFiles = fileMeta.Values.ToList()
+            };
+
+            //string json = JsonConvert.SerializeObject(nodeInfo);
+
+            JsonContent content = new JsonContent(nodeInfo);
+            await httpClient.PostAsync(url, content);
         }
 
         private Dictionary<string, List<BlockInfo>> ParseDataDirectory()
@@ -296,10 +374,10 @@ namespace DFS.Node.Services
         /// </summary>
         /// <param name="file"></param>
         /// <returns></returns>
-        private async Task<State> WriteFile(PartilFile file)
+        private async Task<State> WriteFile(PartialFile file)
         {
             State state = new State();
-            try
+            //try
             {
                 string fileDirectoryPath = $"{DataPath}/{file.FileName}";
                 if (Directory.Exists(fileDirectoryPath))
@@ -320,12 +398,12 @@ namespace DFS.Node.Services
                 }
                 return state;
             }
-            catch (Exception ex)
-            {
-                state.IsSuccess = false;
-                state.Messages.Add(ex.Message);
-                return state;
-            }
+            //catch (Exception ex)
+            //{
+            //    state.IsSuccess = false;
+            //    state.Messages.Add(ex.Message);
+            //    return state;
+            //}
         }
 
         /// <summary>
@@ -336,7 +414,7 @@ namespace DFS.Node.Services
         private async Task<State> WriteBlock(Block block)
         {
             State state = new State();
-            try
+            //try
             {
                 if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
                 {
@@ -347,10 +425,8 @@ namespace DFS.Node.Services
                         File.Delete(blockPath);
                         state.Messages.Add($"Block #{block.Info.Index} has been owerwritten");
                     }
-                    using (FileStream fs = File.Create(blockPath, block.Data.Length, FileOptions.Asynchronous))
-                    {
-                        await fs.WriteAsync(block.Data, 0, block.Data.Length);
-                    }
+
+                    await File.WriteAllBytesAsync(blockPath, block.Data);
                 }
                 else
                 {
@@ -358,12 +434,12 @@ namespace DFS.Node.Services
                 }
                 return state;
             }
-            catch (Exception ex)
-            {
-                state.IsSuccess = false;
-                state.Messages.Add(ex.Message);
-                return state;
-            }
+            //catch (Exception ex)
+            //{
+            //    state.IsSuccess = false;
+            //    state.Messages.Add(ex.Message);
+            //    return state;
+            //}
         }
 
         #region Utils
