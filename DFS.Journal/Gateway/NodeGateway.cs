@@ -52,17 +52,21 @@ namespace DFS.Balancer.Gateway
 
         public async Task<Block> DownloadBlock(string hostName, string fileName, int blockIndex)
         {
-            string action = "DownloadBlock";
-            string url = $"{hostName}/{_controller}/{action}?FileName={fileName}&BlockIndex={blockIndex}";
-            HttpResponseMessage response = await _httpClient.GetAsync(url);
-
-            Block block = null;
-            if (response.StatusCode == System.Net.HttpStatusCode.OK)
+            if (hostName != null)
             {
-                string json = await response.Content.ReadAsStringAsync();
-                block = JsonConvert.DeserializeObject<Block>(json);
+                string action = "DownloadBlock";
+                string url = $"{hostName}/{_controller}/{action}?FileName={fileName}&BlockIndex={blockIndex}";
+                HttpResponseMessage response = await _httpClient.GetAsync(url);
+
+                Block block = null;
+                if (response.StatusCode == System.Net.HttpStatusCode.OK)
+                {
+                    string json = await response.Content.ReadAsStringAsync();
+                    block = JsonConvert.DeserializeObject<Block>(json);
+                }
+                return block;
             }
-            return block;
+            return null;
         }
 
         public async Task<State> AddOrOverwritteBlock(string hostName, string fileName, byte[] data, int blockIndex, int totalBlockCount, bool alowOverwrite)
@@ -90,11 +94,15 @@ namespace DFS.Balancer.Gateway
         public async Task<State> DeleteFile(string hostName, string fileName)
         {
             string action = "DeleteFile";
-            string url = $"{hostName}/{_controller}/{action}?fileName = {fileName}";
+            string url = $"{hostName}/{_controller}/{action}?fileName={fileName}";
             HttpResponseMessage response = await _httpClient.DeleteAsync(url);
+            State state = new State(false);
 
-            string json = await response.Content.ReadAsStringAsync();
-            State state = JsonConvert.DeserializeObject<State>(json);
+            if (response.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                string json = await response.Content.ReadAsStringAsync();
+                state = JsonConvert.DeserializeObject<State>(json);
+            }
             return state;
         }
 

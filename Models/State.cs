@@ -24,12 +24,6 @@ namespace DFS.Node.Models
             Messages = messages ?? new List<string>();
         }
 
-        public State(bool isSuccess, string message)
-        {
-            IsSuccess = isSuccess;
-            Messages = new List<string> { message };
-        }
-
         public static implicit operator bool(State state)
         {
             return state?.IsSuccess == true;

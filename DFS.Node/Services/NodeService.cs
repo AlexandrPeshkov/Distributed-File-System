@@ -1,9 +1,7 @@
 ﻿using DFS.Balancer.Models;
 using DFS.Balancer.Services;
 using DFS.Node.Models;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -16,8 +14,7 @@ namespace DFS.Node.Services
     public class NodeService
     {
         private readonly NodeConfiguration _configuration;
-
-        private readonly KestrelServerOptions _serverOptions;
+        private readonly HostConfig _hostConfig;
 
         private readonly string _blockNamePrefix = "Block_";
 
@@ -27,9 +24,10 @@ namespace DFS.Node.Services
 
         private Dictionary<string, List<BlockInfo>> Files { get; set; }
 
-        public NodeService(IOptions<NodeConfiguration> configuration)
+        public NodeService(IOptions<NodeConfiguration> configuration, IOptions<HostConfig> hostConfig)
         {
             _configuration = configuration.Value;
+            _hostConfig = hostConfig.Value;
             Files = new Dictionary<string, List<BlockInfo>>();
             InitNode();
             ConnectNode().Wait();
@@ -107,7 +105,13 @@ namespace DFS.Node.Services
                         {
                             if (forceOwerrite)
                             {
-                                State isRemoved = Deletelock(block.Info.FileName, block.Info.Index);
+                                State isRemoved = DeleteBlock(block.Info.FileName, block.Info.Index);
+                                blocks.Add(new BlockInfo
+                                {
+                                    FileName = block.Info.FileName,
+                                    Index = block.Info.Index,
+                                    TotalBlockCount = block.Info.TotalBlockCount
+                                });
                             }
                             else
                             {
@@ -185,7 +189,7 @@ namespace DFS.Node.Services
         /// <param name="fileName">Имя файла</param>
         /// <param name="index">Индекс</param>
         /// <returns></returns>
-        public State Deletelock(string fileName, int index)
+        public State DeleteBlock(string fileName, int index)
         {
             State state = new State();
             try
@@ -287,7 +291,7 @@ namespace DFS.Node.Services
         /// <summary>
         /// Инициализация
         /// </summary>
-        private void InitNode()
+        private void InitNode(bool clearOnStart = true)
         {
             if (!Directory.Exists(_configuration.RootPath))
             {
@@ -299,14 +303,21 @@ namespace DFS.Node.Services
                 Directory.CreateDirectory(DataPath);
             }
 
-            Files = ParseDataDirectory();
+            if (clearOnStart)
+            {
+                ClearDirectory(DataPath);
+            }
+            else
+            {
+                Files = ParseDataDirectory();
+            }
         }
 
         private async Task ConnectNode()
         {
             HttpClient httpClient = new HttpClient();
 
-            string url = $"http://{_configuration.BalancerHostName}:{_configuration.BalanderHostPort}/{_apiPrefix}/RegNode";
+            string url = $"http://{_configuration.BalancerHostName}:{_configuration.BalancerHostPort}/{_apiPrefix}/RegNode";
 
             Dictionary<string, FileMeta> fileMeta = new Dictionary<string, FileMeta>();
 
@@ -330,7 +341,7 @@ namespace DFS.Node.Services
 
             NodeInfo nodeInfo = new NodeInfo
             {
-                NodeUrl = "http://localhost:5002",
+                NodeUrl = _hostConfig.Url,
                 PartialFiles = fileMeta.Values.ToList()
             };
 
@@ -460,6 +471,19 @@ namespace DFS.Node.Services
         private string BlockFileName(BlockInfo blockInfo)
         {
             return $"{_blockNamePrefix}{blockInfo.Index}";
+        }
+
+        private void ClearDirectory(string path)
+        {
+            DirectoryInfo di = new DirectoryInfo(path);
+            foreach (FileInfo file in di.GetFiles())
+            {
+                file.Delete();
+            }
+            foreach (DirectoryInfo dir in di.GetDirectories())
+            {
+                dir.Delete(true);
+            }
         }
 
         #endregion Utils

@@ -6,8 +6,10 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 
 namespace DFS.Balancer.Services
@@ -85,15 +87,20 @@ namespace DFS.Balancer.Services
         /// <returns></returns>
         public async Task UploadFile(SourceFile file, bool forceOwerwritte = false)
         {
-            List<Block> blocks = SplitFile(file);
+            string checkSum = CalculateMD5(file.Data);
+
+            List<Block> parts = SplitFile(file);
+
+            byte[] blockData = parts.SelectMany(b => b.Data).ToArray();
 
             if (Files.TryGetValue(file.Name, out var nodeFile))
             {
                 if (forceOwerwritte)
                 {
-                    nodeFile = new NodeFileInfo(blocks.Count)
+                    nodeFile = new NodeFileInfo(parts.Count)
                     {
-                        ContentType = file.ContentType
+                        ContentType = file.ContentType,
+                        CheckSum = checkSum,
                     };
                 }
                 else
@@ -103,47 +110,28 @@ namespace DFS.Balancer.Services
             }
             else
             {
-                nodeFile = new NodeFileInfo(blocks.Count)
+                nodeFile = new NodeFileInfo(parts.Count)
                 {
-                    ContentType = file.ContentType
+                    ContentType = file.ContentType,
+                    CheckSum = checkSum
                 };
 
                 Files.Add(file.Name, nodeFile);
             }
 
-            Dictionary<string, List<Block>> nodeBlocks = new Dictionary<string, List<Block>>();
+            Dictionary<string, List<Block>> hostBlocksList = OptimalHosts(parts);
 
-            foreach (var block in blocks)
+            foreach (var hostBlocks in hostBlocksList)
             {
-                string hostName = GetOptimalNodeForUpload();
-                if (!string.IsNullOrEmpty(hostName))
+                nodeFile.Nodes.Add(new NodeBlockInfo
                 {
-                    if (!nodeBlocks.TryGetValue(hostName, out var tempBlocks))
-                    {
-                        tempBlocks = new List<Block>();
-                        nodeBlocks.Add(hostName, tempBlocks);
-                    }
-                    tempBlocks.Add(block);
-                }
-            }
-
-            //List<Task> tasks = new List<Task>();
-            foreach (var nodeBlock in nodeBlocks)
-            {
-                await _nodeGateway.UploadBlocks(nodeBlock.Key, nodeBlock.Value, forceOwerwritte);
-
-                NodeBlockInfo nodeBlockInfo = new NodeBlockInfo
-                {
-                    HostName = nodeBlock.Key,
+                    HostName = hostBlocks.Key,
                     Priority = 0,
-                    Indexes = nodeBlock.Value.Select(b => b.Info.Index).ToList()
-                };
-
-                nodeFile.Nodes.Add(nodeBlockInfo);
-
-                //tasks.Add(task);
+                    Indexes = hostBlocks.Value.Select(v => v.Info.Index).ToList()
+                });
+                await _nodeGateway.UploadBlocks(hostBlocks.Key, hostBlocks.Value, forceOwerwritte);
             }
-            //await Task.WhenAll(tasks);
+
         }
 
         /// <summary>
@@ -244,6 +232,11 @@ namespace DFS.Balancer.Services
                     state += addState;
                 }
             }
+            else
+            {
+                state.IsSuccess = false;
+                state.Messages.Add("File not found");
+            }
             return state;
         }
 
@@ -262,6 +255,7 @@ namespace DFS.Balancer.Services
                 {
                     await _nodeGateway.DeleteFile(nodeName, fileName);
                 }
+                Files.Remove(fileName);
             }
             return state;
         }
@@ -286,7 +280,7 @@ namespace DFS.Balancer.Services
         /// <returns>Адрес ноды</returns>
         private string GetOptimalNodeForUpload()
         {
-            return Files.Values.SelectMany(x => x.Nodes)
+            var group = Files.Values.SelectMany(x => x.Nodes)
                 .GroupBy(x => x.HostName)
                 .Select(x => new
                 {
@@ -295,9 +289,9 @@ namespace DFS.Balancer.Services
                     Priority = x.Average(t => t.Priority)
                 })
                 .OrderBy(x => x.Sum)
-                .ThenBy(x => x.Priority)
-                .FirstOrDefault()
-                ?.HostName;
+                .ThenBy(x => x.Priority);
+
+            return group.FirstOrDefault()?.HostName;
         }
 
         /// <summary>
@@ -322,14 +316,18 @@ namespace DFS.Balancer.Services
         /// <returns></returns>
         private List<Block> SplitFile(SourceFile sourceFile)
         {
+            int blockSize =
+             //(int)Math.Pow(2, 1); 
+             _configuration.BlockSize;
+
+            int blockCount = (int)Math.Ceiling(sourceFile.Data.Length * 1d / blockSize);
             List<Block> blocks = new List<Block>();
-            int blockCount = (int)Math.Ceiling(sourceFile.Data.Length * 1d / _configuration.BlockSize);
 
             if (sourceFile != null)
             {
-                for (var i = 0; i < sourceFile.Data.Length; i += _configuration.BlockSize)
+                for (var i = 0; i < blockCount; i++)
                 {
-                    var data = sourceFile.Data.Skip(i * _configuration.BlockSize).Take(_configuration.BlockSize).ToArray();
+                    var data = sourceFile.Data.Skip(i * blockSize).Take(blockSize).ToArray();
 
                     Block block = new Block
                     {
@@ -337,7 +335,7 @@ namespace DFS.Balancer.Services
                         Info = new BlockInfo
                         {
                             FileName = sourceFile.Name,
-                            Index = i / _configuration.BlockSize,
+                            Index = i,
                             TotalBlockCount = blockCount
                         }
                     };
@@ -345,6 +343,39 @@ namespace DFS.Balancer.Services
                 }
             }
             return blocks;
+        }
+
+        private Dictionary<string, List<Block>> OptimalHosts(List<Block> blocks)
+        {
+            var optimalHosts = new Dictionary<string, List<Block>>();
+
+            foreach (var block in blocks)
+            {
+                NodeBlockInfo nodeBlockInfo = Files.Values.SelectMany(f => f.Nodes).OrderBy(x => x.Indexes.Count).ThenBy(x => x.Priority).FirstOrDefault();
+                nodeBlockInfo.Indexes.Add(block.Info.Index);
+                if (!optimalHosts.TryGetValue(nodeBlockInfo.HostName, out var parts))
+                {
+                    parts = new List<Block>();
+                    optimalHosts.Add(nodeBlockInfo.HostName, parts);
+                }
+                parts.Add(block);
+            }
+
+            return optimalHosts;
+        }
+
+        private bool ValidateSum(byte[] src, byte[] src2)
+        {
+            return CalculateMD5(src) == CalculateMD5(src2);
+        }
+
+        private string CalculateMD5(byte[] data)
+        {
+            using (var md5 = MD5.Create())
+            {
+                var hash = md5.ComputeHash(data);
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
         }
 
         #endregion Utils

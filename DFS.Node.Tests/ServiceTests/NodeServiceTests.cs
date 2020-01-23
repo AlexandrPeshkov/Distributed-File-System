@@ -14,6 +14,7 @@ namespace DFS.Node.Tests.ServiceTests
     public class NodeServiceTests : IDisposable
     {
         private readonly NodeConfiguration _nodeConfiguration;
+        private readonly HostConfig _hostConfig;
         private readonly NodeService _nodeService;
 
         private readonly IConfigurationRoot _configuration;
@@ -36,7 +37,10 @@ namespace DFS.Node.Tests.ServiceTests
             IOptions<NodeConfiguration> optionAccessor = _serviceProvider.GetService<IOptions<NodeConfiguration>>();
             _nodeConfiguration = optionAccessor.Value;
 
-            _nodeService = new NodeService(optionAccessor);
+            IOptions<HostConfig> optionAccessorHost = _serviceProvider.GetService<IOptions<HostConfig>>();
+            _hostConfig = optionAccessorHost.Value;
+
+            _nodeService = new NodeService(optionAccessor, optionAccessorHost);
         }
 
         [Fact]

@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.IO;
 
 namespace DFS.Journal
 {
@@ -16,11 +13,26 @@ namespace DFS.Journal
             CreateHostBuilder(args).Build().Run();
         }
 
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .ConfigureWebHostDefaults(webBuilder =>
-                {
-                    webBuilder.UseStartup<Startup>();
-                });
+        public static IHostBuilder CreateHostBuilder(string[] args)
+        {
+            var pathToExe = Process.GetCurrentProcess().MainModule.FileName;
+            var pathToContentRoot = Path.GetDirectoryName(pathToExe);
+
+            var appSettingsConfiguration = new ConfigurationBuilder()
+                .SetBasePath(pathToContentRoot)
+                .AddJsonFile("appsettings.json")
+                .AddJsonFile("appsettings.Development.json")
+                .Build();
+
+            var url = appSettingsConfiguration["HostUrl"];
+
+            return Host.CreateDefaultBuilder(args)
+                .UseContentRoot(pathToContentRoot)
+                 .ConfigureWebHostDefaults(webBuilder =>
+                 {
+                     webBuilder.UseStartup<Startup>();
+                     webBuilder.UseUrls(url);
+                 });
+        }
     }
 }

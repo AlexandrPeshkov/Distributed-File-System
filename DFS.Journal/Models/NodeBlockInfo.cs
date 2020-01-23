@@ -21,5 +21,10 @@ namespace DFS.Balancer.Models
         /// Приоритет (пинг\скорость загрузки пр; 0 - высший)
         /// </summary>
         public int Priority { get; set; }
+
+        public NodeBlockInfo()
+        {
+            Indexes = new List<int>();
+        }
     }
 }

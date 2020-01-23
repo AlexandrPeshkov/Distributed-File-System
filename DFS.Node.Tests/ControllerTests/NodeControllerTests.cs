@@ -17,6 +17,7 @@ namespace DFS.Node.Tests.ControllerTests
     public class NodeControllerTests
     {
         private readonly NodeConfiguration _nodeConfiguration;
+        private readonly HostConfig _hostConfig;
         private readonly NodeService _nodeService;
         private readonly IConfigurationRoot _configuration;
         private readonly IServiceProvider _serviceProvider;
@@ -35,12 +36,17 @@ namespace DFS.Node.Tests.ControllerTests
             services.AddOptions(); // this statement is required if you wanna use IOption Pattern.
 
             services.Configure<NodeConfiguration>(_configuration.GetSection(nameof(NodeConfiguration)));
+            services.Configure<HostConfig>(_configuration.GetSection(nameof(HostConfig)));
+
             _serviceProvider = services.BuildServiceProvider();
 
             IOptions<NodeConfiguration> optionAccessor = _serviceProvider.GetService<IOptions<NodeConfiguration>>();
             _nodeConfiguration = optionAccessor.Value;
 
-            _nodeService = new NodeService(optionAccessor);
+            IOptions<HostConfig> optionAccessorHost = _serviceProvider.GetService<IOptions<HostConfig>>();
+            _hostConfig = optionAccessorHost.Value;
+
+            _nodeService = new NodeService(optionAccessor, optionAccessorHost);
             _nodeController = new NodeController(_nodeService);
         }
 

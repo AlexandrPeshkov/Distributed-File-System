@@ -64,8 +64,8 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpGet]
         [Route(nameof(DownloadFile))]
-        [ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK)]
-        public async Task<IActionResult> DownloadFile(string fileName)
+        //[ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK)]
+        public async Task<FileResult> DownloadFile(string fileName)
         {
             SourceFile file = await _balancerService.DownloadFile(fileName);
             if (file != null)
@@ -73,7 +73,7 @@ namespace DFS.Balancer.Controllers
                 var result = File(file.Data, file.ContentType, file.Name);
                 return result;
             }
-            return NotFound(fileName);
+            return null;
         }
 
         /// <summary>
@@ -85,9 +85,14 @@ namespace DFS.Balancer.Controllers
         public async Task<FileResult> DownloadFileBlock(string fileName, int blockIndex)
         {
             Block block = await _balancerService.DownloadBlock(fileName, blockIndex);
-            string contentType = "application/octet-stream";
-            var result = File(block.Data, contentType, block.Info.FileName);
-            return result;
+            if (block != null)
+            {
+                string contentType = "application/octet-stream";
+                var result = File(block.Data, contentType, block.Info.FileName);
+                return result;
+            }
+            return null;
+            
         }
 
         /// <summary>
@@ -97,7 +102,7 @@ namespace DFS.Balancer.Controllers
         /// <param name="blockIndex">Индекс</param>
         /// <param name="file">файл</param>
         /// <returns></returns>
-        [HttpGet]
+        [HttpPatch]
         [Route(nameof(OverwriteBlock))]
         public async Task<IActionResult> OverwriteBlock(IFormFile file, string fileName, int blockIndex)
         {

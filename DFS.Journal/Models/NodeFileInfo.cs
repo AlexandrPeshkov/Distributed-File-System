@@ -15,6 +15,11 @@ namespace DFS.Balancer.Models
         public string ContentType { get; set; }
 
         /// <summary>
+        /// MD5 сумма
+        /// </summary>
+        public string CheckSum { get; set; }
+
+        /// <summary>
         /// Узлы
         /// </summary>
         public List<NodeBlockInfo> Nodes { get; set; }

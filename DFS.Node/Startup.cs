@@ -30,6 +30,11 @@ namespace DFS.Node
 
             var nodeConfiguration = Configuration.GetSection(nameof(NodeConfiguration));
             services.Configure<NodeConfiguration>(nodeConfiguration);
+
+            var hostConfig = Configuration.GetSection(nameof(HostConfig));
+            services.Configure<HostConfig>(hostConfig);
+
+
             services.AddSingleton<NodeService>();
         }
 

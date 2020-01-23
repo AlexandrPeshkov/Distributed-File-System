@@ -16,6 +16,6 @@
         /// <summary>
         /// Порт балансировщика
         /// </summary>
-        public string BalanderHostPort { get; set; }
+        public string BalancerHostPort { get; set; }
     }
 }
