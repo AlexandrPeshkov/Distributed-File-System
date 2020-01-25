@@ -22,9 +22,12 @@ namespace DFS.Balancer.Models
         /// </summary>
         public int TotalBlockCount { get; set; }
 
-        public FileMeta()
+        public int FileSize { get; set; }
+
+        public FileMeta(int fileSize)
         {
             Indexes = new List<int>();
+            FileSize = fileSize;
         }
     }
 }

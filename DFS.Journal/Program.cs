@@ -15,11 +15,11 @@ namespace DFS.Journal
 
         public static IHostBuilder CreateHostBuilder(string[] args)
         {
-            var pathToExe = Process.GetCurrentProcess().MainModule.FileName;
-            var pathToContentRoot = Path.GetDirectoryName(pathToExe);
+            //var pathToExe = Process.GetCurrentProcess().MainModule.FileName;
+            //var pathToContentRoot = Path.GetDirectoryName(pathToExe);
 
             var appSettingsConfiguration = new ConfigurationBuilder()
-                .SetBasePath(pathToContentRoot)
+                //.SetBasePath(pathToContentRoot)
                 .AddJsonFile("appsettings.json")
                 .AddJsonFile("appsettings.Development.json")
                 .Build();
@@ -27,7 +27,7 @@ namespace DFS.Journal
             var url = appSettingsConfiguration["HostUrl"];
 
             return Host.CreateDefaultBuilder(args)
-                .UseContentRoot(pathToContentRoot)
+                //.UseContentRoot(pathToContentRoot)
                  .ConfigureWebHostDefaults(webBuilder =>
                  {
                      webBuilder.UseStartup<Startup>();
