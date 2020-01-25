@@ -6,7 +6,7 @@
 
         public string NodeName { get; set; }
 
-        public int BlockSize { get; set; }
+        //public int BlockSize { get; set; }
 
         /// <summary>
         /// Адрес балансировщика

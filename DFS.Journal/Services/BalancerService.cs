@@ -35,7 +35,7 @@ namespace DFS.Balancer.Services
         /// Присоеденить ноду
         /// </summary>
         /// <param name="node">Файловая нода</param>
-        public void AddNode(NodeInfo node)
+        public int AddNode(NodeInfo node)
         {
             if (node != null && node.PartialFiles != null)
             {
@@ -53,8 +53,7 @@ namespace DFS.Balancer.Services
 
                 foreach (var file in node.PartialFiles)
                 {
-                    NodeFileInfo nodeFileInfo = null;
-
+                    NodeFileInfo nodeFileInfo;
                     if (!Files.TryGetValue(file.FileName, out nodeFileInfo))
                     {
                         nodeFileInfo = new NodeFileInfo(file.TotalBlockCount, file.FileSize);
@@ -78,6 +77,7 @@ namespace DFS.Balancer.Services
                     });
                 }
             }
+            return _configuration.BlockSize;
         }
 
         /// <summary>
@@ -130,8 +130,23 @@ namespace DFS.Balancer.Services
                     Priority = 0,
                     Indexes = hostBlocks.Value.Select(v => v.Info.Index).ToList()
                 });
-                await _nodeGateway.UploadBlocks(hostBlocks.Key, hostBlocks.Value, forceOwerwritte);
+                foreach (var block in hostBlocks.Value)
+                {
+                    await _nodeGateway.AddOrOverwritteBlock(hostBlocks.Key, file.Name, block.Data, block.Info.Index, block.Info.TotalBlockCount, forceOwerwritte);
+                }
             }
+
+            //foreach (var hostBlocks in hostBlocksList)
+            //{
+            //    nodeFile.Nodes.Add(new NodeBlockInfo
+            //    {
+            //        HostName = hostBlocks.Key,
+            //        Priority = 0,
+            //        Indexes = hostBlocks.Value.Select(v => v.Info.Index).ToList()
+            //    });
+
+            //    await _nodeGateway.UploadBlocks(hostBlocks.Key, hostBlocks.Value, forceOwerwritte);
+            //}
         }
 
         /// <summary>
@@ -142,7 +157,7 @@ namespace DFS.Balancer.Services
         public async Task<SourceFile> DownloadFile(string fileName)
         {
             SourceFile sourceFile = null;
-            int fileSize = 0;
+
             if (Files.TryGetValue(fileName, out var nodeInfos))
             {
                 List<Block> blocks = new List<Block>(nodeInfos.BlockCount);
@@ -162,7 +177,7 @@ namespace DFS.Balancer.Services
                     }
                 }
 
-                byte[] data = blocks.OrderBy(b => b.Info.Index).SelectMany(b => b.Data).Take(fileSize).ToArray();
+                byte[] data = blocks.OrderBy(b => b.Info.Index).SelectMany(b => b.Data).Take(nodeInfos.FileSize).ToArray();
                 sourceFile = new SourceFile
                 {
                     Name = fileName,
@@ -316,18 +331,14 @@ namespace DFS.Balancer.Services
         /// <returns></returns>
         private List<Block> SplitFile(SourceFile sourceFile)
         {
-            int blockSize =
-             //(int)Math.Pow(2, 1);
-             _configuration.BlockSize;
-
-            int blockCount = (int)Math.Ceiling(sourceFile.Data.Length * 1d / blockSize);
+            int blockCount = (int)Math.Ceiling(sourceFile.Data.Length * 1d / _configuration.BlockSize);
             List<Block> blocks = new List<Block>();
 
             if (sourceFile != null)
             {
                 for (var i = 0; i < blockCount; i++)
                 {
-                    var data = sourceFile.Data.Skip(i * blockSize).Take(blockSize).ToArray();
+                    var data = sourceFile.Data.Skip(i * _configuration.BlockSize).Take(_configuration.BlockSize).ToArray();
 
                     Block block = new Block
                     {

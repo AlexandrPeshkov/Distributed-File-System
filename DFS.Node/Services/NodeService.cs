@@ -2,6 +2,7 @@
 using DFS.Balancer.Services;
 using DFS.Node.Models;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,6 +24,8 @@ namespace DFS.Node.Services
         private string DataPath => $"{_configuration.RootPath}\\{_configuration.NodeName}";
 
         private Dictionary<string, List<BlockInfo>> Files { get; set; }
+
+        private int BlockSize { get; set; }
 
         public NodeService(IOptions<NodeConfiguration> configuration, IOptions<HostConfig> hostConfig)
         {
@@ -95,56 +98,66 @@ namespace DFS.Node.Services
         public async Task<State> TryAddBlock(Block block, bool forceOwerrite = false)
         {
             State state = new State();
-            try
+            //try
+            //{
+            if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
             {
-                if (block != null && block.Info != null && !string.IsNullOrEmpty(block.Info.FileName))
+                if (Files.TryGetValue(block.Info.FileName, out var blocks))
                 {
-                    if (Files.TryGetValue(block.Info.FileName, out var blocks))
+                    if (blocks.Exists(b => b.Index == block.Info.Index))
                     {
-                        if (blocks.Exists(b => b.Index == block.Info.Index))
+                        if (forceOwerrite)
                         {
-                            if (forceOwerrite)
+                            State isRemoved = DeleteBlock(block.Info.FileName, block.Info.Index);
+                            blocks.Add(new BlockInfo
                             {
-                                State isRemoved = DeleteBlock(block.Info.FileName, block.Info.Index);
-                                blocks.Add(new BlockInfo
-                                {
-                                    FileName = block.Info.FileName,
-                                    Index = block.Info.Index,
-                                    TotalBlockCount = block.Info.TotalBlockCount
-                                });
-                            }
-                            else
-                            {
-                                state.IsSuccess = false;
-                                state.Messages.Add($"Block with index {block.Info.Index} already exist for file {block.Info.FileName}");
-                                return state;
-                            }
+                                FileName = block.Info.FileName,
+                                Index = block.Info.Index,
+                                TotalBlockCount = block.Info.TotalBlockCount
+                            });
                         }
-                        state = await WriteBlock(block);
+                        else
+                        {
+                            state.IsSuccess = false;
+                            state.Messages.Add($"Block with index {block.Info.Index} already exist for file {block.Info.FileName}");
+                            return state;
+                        }
                     }
                     else
                     {
-                        state = await TryAddFile(new PartialFile
+                        blocks.Add(new BlockInfo
                         {
                             FileName = block.Info.FileName,
-                            Blocks = new List<Block> { block },
+                            Index = block.Info.Index,
                             TotalBlockCount = block.Info.TotalBlockCount
                         });
                     }
+
+                    state = await WriteBlock(block);
                 }
                 else
                 {
-                    state.IsSuccess = false;
-                    state.Messages.Add("Block is incorrect");
+                    state = await TryAddFile(new PartialFile
+                    {
+                        FileName = block.Info.FileName,
+                        Blocks = new List<Block> { block },
+                        TotalBlockCount = block.Info.TotalBlockCount
+                    });
                 }
-                return state;
             }
-            catch (Exception ex)
+            else
             {
                 state.IsSuccess = false;
-                state.Messages.Add(ex.Message);
-                return state;
+                state.Messages.Add("Block is incorrect");
             }
+            return state;
+            //}
+            //catch (Exception ex)
+            //{
+            //    state.IsSuccess = false;
+            //    state.Messages.Add(ex.Message);
+            //    return state;
+            //}
         }
 
         /// <summary>
@@ -250,10 +263,10 @@ namespace DFS.Node.Services
 
                 if (File.Exists(blockPath))
                 {
-                    byte[] buffer = new byte[_configuration.BlockSize];
+                    byte[] buffer = new byte[BlockSize];
                     using (var reader = File.OpenRead(blockPath))
                     {
-                        await reader.ReadAsync(buffer, 0, _configuration.BlockSize);
+                        await reader.ReadAsync(buffer, 0, BlockSize);
                     }
 
                     block = new Block
@@ -318,12 +331,12 @@ namespace DFS.Node.Services
             HttpClient httpClient = new HttpClient();
 
             string url = $"http://{_configuration.BalancerHostName}:{_configuration.BalancerHostPort}/{_apiPrefix}/RegNode";
-
             Dictionary<string, FileMeta> fileMeta = new Dictionary<string, FileMeta>();
 
             foreach (var fileInfo in Files)
             {
-                FileMeta meta = new FileMeta
+                int fileSize = fileInfo.Value.Select(b => b.Index).Distinct().Max();
+                FileMeta meta = new FileMeta(fileSize)
                 {
                     FileName = fileInfo.Key,
                     TotalBlockCount = fileInfo.Value.FirstOrDefault().TotalBlockCount
@@ -348,7 +361,12 @@ namespace DFS.Node.Services
             //string json = JsonConvert.SerializeObject(nodeInfo);
 
             JsonContent content = new JsonContent(nodeInfo);
-            await httpClient.PostAsync(url, content);
+            var response = await httpClient.PostAsync(url, content);
+            if (response.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                string json = await response.Content.ReadAsStringAsync();
+                BlockSize = JsonConvert.DeserializeObject<int>(json);
+            }
         }
 
         private Dictionary<string, List<BlockInfo>> ParseDataDirectory()

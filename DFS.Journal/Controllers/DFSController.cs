@@ -28,9 +28,9 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpPost]
         [Route(nameof(RegNode))]
-        public void RegNode(NodeInfo node)
+        public IActionResult RegNode(NodeInfo node)
         {
-            _balancerService.AddNode(node);
+            return Ok(_balancerService.AddNode(node));
         }
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpPost]
         [Route(nameof(UploadFile))]
-        public async Task UploadFile(IFormFile file, bool forceOwerrite)
+        public async Task<IActionResult> UploadFile(IFormFile file, bool forceOwerrite)
         {
             using (var ms = new MemoryStream())
             {
@@ -54,6 +54,7 @@ namespace DFS.Balancer.Controllers
                     ContentType = file.ContentType
                 };
                 await _balancerService.UploadFile(sourceFile, forceOwerrite);
+                return Ok($"File {file.Name} has been uploaded");
             }
         }
 
@@ -64,7 +65,7 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpGet]
         [Route(nameof(DownloadFile))]
-        public async Task<FileResult> DownloadFile(string fileName)
+        public async Task<IActionResult> DownloadFile(string fileName)
         {
             SourceFile file = await _balancerService.DownloadFile(fileName);
             if (file != null)
@@ -72,7 +73,7 @@ namespace DFS.Balancer.Controllers
                 var result = File(file.Data, file.ContentType, file.Name);
                 return result;
             }
-            return null;
+            return NotFound(fileName);
         }
 
         /// <summary>
@@ -81,7 +82,7 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpGet]
         [Route(nameof(DownloadFileBlock))]
-        public async Task<FileResult> DownloadFileBlock(string fileName, int blockIndex)
+        public async Task<IActionResult> DownloadFileBlock(string fileName, int blockIndex)
         {
             Block block = await _balancerService.DownloadBlock(fileName, blockIndex);
             if (block != null)
@@ -90,8 +91,7 @@ namespace DFS.Balancer.Controllers
                 var result = File(block.Data, contentType, block.Info.FileName);
                 return result;
             }
-            return null;
-            
+            return NotFound(fileName);
         }
 
         /// <summary>
