@@ -142,7 +142,7 @@ namespace DFS.Balancer.Services
         public async Task<SourceFile> DownloadFile(string fileName)
         {
             SourceFile sourceFile = null;
-
+            int fileSize = 0;
             if (Files.TryGetValue(fileName, out var nodeInfos))
             {
                 List<Block> blocks = new List<Block>(nodeInfos.BlockCount);
@@ -162,7 +162,7 @@ namespace DFS.Balancer.Services
                     }
                 }
 
-                byte[] data = blocks.OrderBy(b => b.Info.Index).SelectMany(b => b.Data).ToArray();
+                byte[] data = blocks.OrderBy(b => b.Info.Index).SelectMany(b => b.Data).Take(fileSize).ToArray();
                 sourceFile = new SourceFile
                 {
                     Name = fileName,

@@ -64,7 +64,6 @@ namespace DFS.Balancer.Controllers
         /// <returns></returns>
         [HttpGet]
         [Route(nameof(DownloadFile))]
-        //[ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK)]
         public async Task<FileResult> DownloadFile(string fileName)
         {
             SourceFile file = await _balancerService.DownloadFile(fileName);
