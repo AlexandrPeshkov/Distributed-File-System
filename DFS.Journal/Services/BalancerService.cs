@@ -41,11 +41,12 @@ namespace DFS.Balancer.Services
             {
                 if (!node.PartialFiles.Any())
                 {
-                    node.PartialFiles.Add(new FileMeta
+                    node.PartialFiles.Add(new FileMeta(9)
                     {
                         FileName = "INIT_FILE",
                         Indexes = new List<int> { 0 },
-                        TotalBlockCount = 1
+                        TotalBlockCount = 1,
+                        FileSize = 9
                     }
                     );
                 }
@@ -56,7 +57,7 @@ namespace DFS.Balancer.Services
 
                     if (!Files.TryGetValue(file.FileName, out nodeFileInfo))
                     {
-                        nodeFileInfo = new NodeFileInfo(file.TotalBlockCount);
+                        nodeFileInfo = new NodeFileInfo(file.TotalBlockCount, file.FileSize);
                         Files.Add(file.FileName, nodeFileInfo);
                     }
                     else
@@ -97,7 +98,7 @@ namespace DFS.Balancer.Services
             {
                 if (forceOwerwritte)
                 {
-                    nodeFile = new NodeFileInfo(parts.Count)
+                    nodeFile = new NodeFileInfo(parts.Count, file.Data.Length)
                     {
                         ContentType = file.ContentType,
                         CheckSum = checkSum,
@@ -110,7 +111,7 @@ namespace DFS.Balancer.Services
             }
             else
             {
-                nodeFile = new NodeFileInfo(parts.Count)
+                nodeFile = new NodeFileInfo(parts.Count, file.Data.Length)
                 {
                     ContentType = file.ContentType,
                     CheckSum = checkSum
@@ -131,7 +132,6 @@ namespace DFS.Balancer.Services
                 });
                 await _nodeGateway.UploadBlocks(hostBlocks.Key, hostBlocks.Value, forceOwerwritte);
             }
-
         }
 
         /// <summary>
@@ -317,7 +317,7 @@ namespace DFS.Balancer.Services
         private List<Block> SplitFile(SourceFile sourceFile)
         {
             int blockSize =
-             //(int)Math.Pow(2, 1); 
+             //(int)Math.Pow(2, 1);
              _configuration.BlockSize;
 
             int blockCount = (int)Math.Ceiling(sourceFile.Data.Length * 1d / blockSize);
